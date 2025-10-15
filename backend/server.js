@@ -25,7 +25,7 @@ app.use("/settlement", settlementRoutes);
 
 
 app.get("/", (req, res) => {
-  res.send("🏡 HomeChain backend is running successfully!");
+  res.send("🏡 PenthouseProtocol backend is running successfully!");
 });
 
 
