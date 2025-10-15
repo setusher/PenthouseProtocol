@@ -1,0 +1,52 @@
+# Node modules
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+package-lock.json
+yarn.lock
+.pnpm-debug.log
+
+# Env files
+.env
+.env.*.local
+
+# Logs
+logs
+*.log
+logs/*
+npm-debug.log*
+yarn-debug.log*
+/coverage
+/.nyc_output
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor / IDE
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+# Build / Dist
+dist/
+build/
+out/
+.cache/
+
+# Misc
+*.tgz
+*.tmp
+*.swp
+coverage/
+coverage-final.json
+
+# Optional: lockfile for pnpm / pnpm store
+.pnp.*
+.pnpm-store/
+
+# If you use macOS local-specific files
+*.localized
