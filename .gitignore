@@ -50,3 +50,6 @@ coverage-final.json
 
 # If you use macOS local-specific files
 *.localized
+
+# private keys
+backend/penthouse-protocol-service.json
