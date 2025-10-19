@@ -1,9 +1,4 @@
-var admin = require("firebase-admin");
-var serviceAcc = require("/penthouse-protocol-service.json");
-
-const app = initializeApp({
-  credential: admin.credential.cert(serviceAcc),
-});
+import { auth } from "../services/firebaseService.js";
 
 const firebaseAuthMiddleware = async (req, res, next) => {
   const token = req.headers.authorization?.split("Bearer ")[1];
@@ -13,7 +8,7 @@ const firebaseAuthMiddleware = async (req, res, next) => {
   }
 
   try {
-    var res = await admin.auth().verifyIdToken(token);
+    var res = await auth.verifyIdToken(token);
   } catch (e) {
     return res.status(403).json({ error: e });
   }

@@ -4,7 +4,11 @@ const operatorId = AccountId.fromString(process.env.HEDERA_ACCOUNT_ID);
 const operatorKey = PrivateKey.fromStringDer(process.env.HEDERA_PRIVATE_KEY);
 const client = Client.forTestnet().setOperator(operatorId, operatorKey);
 
-async function createPropertyToken(tokenName, tokenSymbol, initialSupply) {
+export async function createPropertyToken(
+  tokenName,
+  tokenSymbol,
+  initialSupply
+) {
   const createTx = await new TokenCreateTransaction()
     .setTokenName(tokenName)
     .setTokenSymbol(tokenSymbol)
@@ -23,7 +27,7 @@ async function createPropertyToken(tokenName, tokenSymbol, initialSupply) {
   return tokenId.toString();
 }
 
-async function transferTokens(tokenId, amount, userAccountId) {
+export async function transferTokens(tokenId, amount, userAccountId) {
   try {
     const transferTx = await new TransferTransaction()
       .addTokenTransfer(tokenId, operatorId, -amount)
@@ -39,3 +43,5 @@ async function transferTokens(tokenId, amount, userAccountId) {
     return false;
   }
 }
+
+export async function getTreasuryTokenBalance(tokenId) {}
