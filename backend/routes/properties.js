@@ -1,14 +1,17 @@
 const { Router } = require("express");
 const router = Router();
 const firebaseAuth = require("../middleware/firebaseAuth");
-import { db } from "../services/firebaseService.js";
+const { db } = require("../services/firebaseService.js");
 const { FieldValue } = require("firebase-admin/firestore");
 
 const {
   createPropertyToken,
   transferTokens,
   getTreasuryTokenBalance,
+  verifyUsdcPayment,
 } = require("../services/hederaService");
+
+const USDC_DECIMALS = 6;
 
 router.get("/", async (req, res) => {
   try {
@@ -86,22 +89,35 @@ router.post("/:id/invest", firebaseAuth, async (req, res) => {
 
     const userDoc = await db.collection("users").doc(investorUserId).get();
     if (!userDoc.exists || !userDoc.data().isKycVerified) {
-      return res.status(403).json({
-        error:
-          "KYC verification required. Please complete the mock KYC step in the app.",
-      });
+      return res.status(403).json({ error: "KYC verification required." });
     }
 
     const propRef = db.collection("properties").doc(propertyId);
     const propDoc = await propRef.get();
-
     if (!propDoc.exists) {
       return res.status(404).json({ error: "Property not found." });
     }
-
     const { hederaTokenId, pricePerToken } = propDoc.data();
-    const onChainBalance = await getTreasuryTokenBalance(hederaTokenId);
 
+    const expectedUsdcAmountSmallestUnit = Math.round(
+      amount * pricePerToken * 10 ** USDC_DECIMALS
+    );
+    let paymentTxId;
+    try {
+      paymentTxId = await verifyUsdcPayment(
+        db,
+        userHederaAccountId,
+        expectedUsdcAmountSmallestUnit,
+        "investment",
+        propertyId
+      );
+    } catch (paymentError) {
+      return res.status(402).json({
+        error: `Payment verification failed: ${paymentError.message}`,
+      });
+    }
+
+    const onChainBalance = await getTreasuryTokenBalance(hederaTokenId);
     if (amount > onChainBalance) {
       return res.status(409).json({
         error: `Not enough tokens available. Only ${onChainBalance} remaining.`,
@@ -113,24 +129,22 @@ router.post("/:id/invest", firebaseAuth, async (req, res) => {
       amount,
       userHederaAccountId
     );
-
     if (!success) {
-      throw new Error(
-        "Hedera token transfer transaction failed. The tokens may have just been sold."
-      );
+      return res.status(500).json({
+        error:
+          "Token transfer failed after payment verified. Please contact support.",
+      });
     }
 
-    const paymentAmount = amount * pricePerToken;
     await propRef.update({
-      escrowBalance: FieldValue.increment(paymentAmount),
+      escrowBalance: FieldValue.increment(amount * pricePerToken),
     });
 
     res.json({
       message: `Successfully invested in property ${propertyId}. ${amount} tokens transferred.`,
-      paymentReceived: paymentAmount,
+      paymentTxId: paymentTxId,
     });
   } catch (error) {
-    console.error(`Investment in ${req.params.id} failed:`, error.message);
     res.status(500).json({ error: "Failed to process investment." });
   }
 });
@@ -138,27 +152,43 @@ router.post("/:id/invest", firebaseAuth, async (req, res) => {
 router.post("/:id/rent", firebaseAuth, async (req, res) => {
   try {
     const { id: propertyId } = req.params;
-    const { leaseStartDate, leaseEndDate } = req.body;
+    const { leaseStartDate, leaseEndDate, userHederaAccountId } = req.body;
     const renterUserId = req.uid;
 
     const userDoc = await db.collection("users").doc(renterUserId).get();
     if (!userDoc.exists || !userDoc.data().isKycVerified) {
-      return res.status(403).json({
-        error:
-          "KYC verification required. Please complete the mock KYC step in the app.",
-      });
+      return res.status(403).json({ error: "KYC verification required." });
     }
 
     const propRef = db.collection("properties").doc(propertyId);
     const propDoc = await propRef.get();
-
     if (!propDoc.exists) {
       return res.status(404).json({ error: "Property not found." });
     }
-    if (propDoc.data().status !== "available") {
+    const { rentalPrice, status: propertyStatus } = propDoc.data();
+
+    if (propertyStatus !== "available") {
       return res
         .status(409)
         .json({ error: "This property is already rented." });
+    }
+
+    const expectedUsdcAmountSmallestUnit = Math.round(
+      rentalPrice * 10 ** USDC_DECIMALS
+    );
+    let paymentTxId;
+    try {
+      paymentTxId = await verifyUsdcPayment(
+        db,
+        userHederaAccountId,
+        expectedUsdcAmountSmallestUnit,
+        "rent",
+        propertyId
+      );
+    } catch (paymentError) {
+      return res.status(402).json({
+        error: `Rent payment verification failed: ${paymentError.message}`,
+      });
     }
 
     await propRef.update({
@@ -171,12 +201,20 @@ router.post("/:id/rent", firebaseAuth, async (req, res) => {
       tenantUserId: renterUserId,
       leaseStartDate: new Date(leaseStartDate),
       leaseEndDate: new Date(leaseEndDate),
+      firstPaymentTxId: paymentTxId,
+      paymentVerified: true,
       createdAt: new Date(),
     });
 
-    res.json({ message: `Successfully rented property ${propertyId}.` });
+    await propRef.update({
+      escrowBalance: FieldValue.increment(rentalPrice),
+    });
+
+    res.json({
+      message: `Successfully rented property ${propertyId}. Payment verified.`,
+      paymentTxId: paymentTxId,
+    });
   } catch (error) {
-    console.error(`Renting property ${req.params.id} failed:`, error);
     res.status(500).json({ error: "Failed to rent property." });
   }
 });
