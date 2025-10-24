@@ -9,5 +9,5 @@ const balance = await new AccountBalanceQuery()
   .setAccountId(process.env.MY_ACCOUNT_ID)
   .execute(client);
 
-console.log("✅ Connected successfully!");
-console.log("💰 Balance:", balance.hbars.toString());
+console.log(" Connected successfully!");
+console.log(" Balance:", balance.hbars.toString());

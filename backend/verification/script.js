@@ -11,7 +11,7 @@ import {
   TopicMessageSubmitTransaction,
 } from "@hashgraph/sdk";
 
-// ✅ Hedera client setup using ECDSA key
+// Hedera client setup using ECDSA key
 const accountId = process.env.MY_ACCOUNT_ID;
 const privateKeyString = process.env.MY_PRIVATE_KEY;
 
@@ -41,7 +41,7 @@ async function recordVerification(propertyId, ownerId) {
   const result = verifyOwnership(propertyId, ownerId);
 
   if (!result.verified) {
-    console.error(`❌ Verification failed for Property ID ${propertyId}: ${result.reason}`);
+    console.error(`Verification failed for Property ID ${propertyId}: ${result.reason}`);
     return;
   }
 
@@ -54,15 +54,14 @@ async function recordVerification(propertyId, ownerId) {
 
   try {
     const tx = await new TopicMessageSubmitTransaction({ topicId, message }).execute(client);
-    console.log("✅ On-chain verification successful!");
-    console.log("🔗 Transaction ID:", tx.transactionId.toString());
-    console.log("📜 Message logged to topic:", topicId);
+    console.log(" On-chain verification successful!");
+    console.log(" Transaction ID:", tx.transactionId.toString());
+    console.log(" Message logged to topic:", topicId);
   } catch (err) {
-    console.error("❌ Failed to submit transaction:", err);
+   console.error(" Failed to submit transaction:", err);
   }
 }
-
-// ▶️ Example run
+// ▶ Example run
 (async () => {
   await recordVerification("2", "67890");
 })();
