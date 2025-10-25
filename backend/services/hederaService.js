@@ -2,7 +2,7 @@ const { AccountId, PrivateKey, Client } = require("@hashgraph/sdk");
 const axios = require("axios");
 
 const operatorId = AccountId.fromString(process.env.HEDERA_ACCOUNT_ID);
-const operatorKey = PrivateKey.fromStringDer(process.env.HEDERA_PRIVATE_KEY);
+const operatorKey = PrivateKey.fromStringECDSA(process.env.HEDERA_PRIVATE_KEY);
 const client = Client.forTestnet().setOperator(operatorId, operatorKey);
 const MIRROR_NODE_URL = "https://testnet.mirrornode.hedera.com";
 const USDC_TOKEN_ID = process.env.USDC_TOKEN_ID;
@@ -154,3 +154,11 @@ export async function verifyUsdcPayment(
   });
   return validTxId;
 }
+
+module.exports = {
+  createPropertyToken,
+  transferTokens,
+  getTreasuryTokenBalance,
+  verifyUsdcPayment,
+  client,
+};

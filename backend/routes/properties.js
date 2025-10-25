@@ -10,6 +10,7 @@ const {
   getTreasuryTokenBalance,
   verifyUsdcPayment,
 } = require("../services/hederaService");
+const { recordVerification } = require("../verification/script.js");
 
 const USDC_DECIMALS = 6;
 
@@ -32,10 +33,15 @@ router.get("/", async (req, res) => {
 });
 
 router.post("/", firebaseAuth, async (req, res) => {
+  const { propertyId, ownerId } = req.body;
+  let resp = recordVerification(propertyId, ownerId);
+  res.json(resp);
+});
+
+router.post("/mint", firebaseAuth, async (req, res) => {
   try {
     const {
       propertyName,
-      symbol,
       initialSupply,
       description,
       imageUrl,
@@ -48,7 +54,7 @@ router.post("/", firebaseAuth, async (req, res) => {
 
     const tokenId = await createPropertyToken(
       propertyName,
-      symbol,
+      propertyName.slice(0, 3).toUpperCase(),
       initialSupply
     );
 
@@ -57,7 +63,6 @@ router.post("/", firebaseAuth, async (req, res) => {
       ownerHederaAccountId,
       hederaTokenId: tokenId,
       name: propertyName,
-      symbol,
       description,
       imageUrl,
       rentalPrice,
@@ -78,6 +83,31 @@ router.post("/", firebaseAuth, async (req, res) => {
   } catch (error) {
     console.error("Property creation failed:", error);
     res.status(500).json({ error: "Failed to create property and token." });
+  }
+});
+
+router.get("/treasury-balance/:tokenId", async (req, res) => {
+  try {
+    const { tokenId } = req.params;
+
+    if (!tokenId || !tokenId.match(/^\d{1,10}\.\d{1,10}\.\d{1,10}$/)) {
+      return res
+        .status(400)
+        .json({ error: "Invalid or missing token ID format." });
+    }
+
+    const balance = await getTreasuryTokenBalance(tokenId);
+
+    res.json({
+      tokenId: tokenId,
+      treasuryBalance: balance,
+    });
+  } catch (error) {
+    console.error(
+      `Error fetching treasury balance for ${req.params.tokenId}:`,
+      error
+    );
+    res.status(500).json({ error: "Failed to fetch treasury token balance." });
   }
 });
 
@@ -140,9 +170,26 @@ router.post("/:id/invest", firebaseAuth, async (req, res) => {
       escrowBalance: FieldValue.increment(amount * pricePerToken),
     });
 
+    const investmentData = {
+      investorUserId: investorUserId,
+      investorHederaAccountId: userHederaAccountId,
+      propertyId: propertyId,
+      hederaTokenId: hederaTokenId,
+      amountInvestedTokens: amount,
+      amountPaidUsdcSmallestUnit: expectedUsdcAmountSmallestUnit,
+      pricePerTokenAtInvestment: pricePerToken,
+      paymentTxId: paymentTxId,
+      investmentTimestamp: FieldValue.serverTimestamp(),
+    };
+
+    const investmentRef = await db
+      .collection("investments")
+      .add(investmentData);
+
     res.json({
       message: `Successfully invested in property ${propertyId}. ${amount} tokens transferred.`,
       paymentTxId: paymentTxId,
+      investmentId: investmentRef.id,
     });
   } catch (error) {
     res.status(500).json({ error: "Failed to process investment." });
