@@ -1,17 +1,22 @@
-const { AccountId, PrivateKey, Client } = require("@hashgraph/sdk");
-const axios = require("axios");
+import {
+  AccountId,
+  PrivateKey,
+  Client,
+  TokenCreateTransaction,
+  TokenType,
+  TransferTransaction,
+} from "@hashgraph/sdk";
+import axios from "axios";
 
 const operatorId = AccountId.fromString(process.env.HEDERA_ACCOUNT_ID);
 const operatorKey = PrivateKey.fromStringECDSA(process.env.HEDERA_PRIVATE_KEY);
 const client = Client.forTestnet().setOperator(operatorId, operatorKey);
+
 const MIRROR_NODE_URL = "https://testnet.mirrornode.hedera.com";
 const USDC_TOKEN_ID = process.env.USDC_TOKEN_ID;
+const TREASURY_ACCOUNT_ID = process.env.HEDERA_ACCOUNT_ID;
 
-export async function createPropertyToken(
-  tokenName,
-  tokenSymbol,
-  initialSupply
-) {
+export async function createPropertyToken(tokenName, tokenSymbol, initialSupply) {
   const createTx = await new TokenCreateTransaction()
     .setTokenName(tokenName)
     .setTokenSymbol(tokenSymbol)
@@ -27,6 +32,8 @@ export async function createPropertyToken(
   const txResponse = await signedTx.execute(client);
   const receipt = await txResponse.getReceipt(client);
   const tokenId = receipt.tokenId;
+
+  console.log(`Property token created: ${tokenId.toString()}`);
   return tokenId.toString();
 }
 
@@ -43,6 +50,7 @@ export async function transferTokens(tokenId, amount, userAccountId) {
 
     return transferReceipt.status.toString() === "SUCCESS";
   } catch (error) {
+    console.error("Error transferring tokens:", error);
     return false;
   }
 }
@@ -57,9 +65,7 @@ export async function getTreasuryTokenBalance(tokenId) {
 
   try {
     const response = await axios.get(apiUrl);
-
-    const data = response.data;
-    const tokens = data.tokens;
+    const tokens = response.data.tokens;
 
     if (tokens && tokens.length > 0) {
       const tokenInfo = tokens[0];
@@ -69,14 +75,7 @@ export async function getTreasuryTokenBalance(tokenId) {
       return 0;
     }
   } catch (error) {
-    console.error(
-      `Error fetching token balance for ${tokenId} from mirror node:`,
-      error.message
-    );
-    if (error.response) {
-      console.error("API Response Status:", error.response.status);
-      console.error("API Response Data:", error.response.data);
-    }
+    console.error(`Error fetching token balance:`, error.message);
     return 0;
   }
 }
@@ -93,54 +92,37 @@ export async function verifyUsdcPayment(
   let response;
   try {
     response = await axios.get(url);
-  } catch (err) {
-    throw new Error(
-      `Could not connect to mirror node to verify ${paymentType} USDC payment.`
-    );
+  } catch {
+    throw new Error(`Could not connect to mirror node to verify ${paymentType} USDC payment.`);
   }
 
   const transactions = response.data.transactions;
   if (!transactions || transactions.length === 0) {
-    throw new Error(
-      `${
-        paymentType.charAt(0).toUpperCase() + paymentType.slice(1)
-      } USDC payment not found. Please wait a few moments and try again.`
-    );
+    throw new Error(`No ${paymentType} USDC payment found.`);
   }
 
   let validTxId = null;
   for (const tx of transactions) {
     const senderTransfer = tx.token_transfers.find(
-      (transfer) =>
-        transfer.account === senderAccountId &&
-        transfer.amount === -expectedAmount
+      (t) => t.account === senderAccountId && t.amount === -expectedAmount
     );
     const treasuryTransfer = tx.token_transfers.find(
-      (transfer) =>
-        transfer.account === TREASURY_ACCOUNT_ID &&
-        transfer.amount === expectedAmount
+      (t) => t.account === TREASURY_ACCOUNT_ID && t.amount === expectedAmount
     );
 
     if (senderTransfer && treasuryTransfer) {
-      const txRef = db
-        .collection("processedTransactions")
-        .doc(tx.transaction_id);
+      const txRef = db.collection("processedTransactions").doc(tx.transaction_id);
       const txDoc = await txRef.get();
 
-      if (txDoc.exists) {
-        continue; // Keep looking for a newer, unused one
+      if (!txDoc.exists) {
+        validTxId = tx.transaction_id;
+        break;
       }
-
-      // Found a new, valid payment!
-      validTxId = tx.transaction_id;
-      break;
     }
   }
 
   if (!validTxId) {
-    throw new Error(
-      `Valid ${paymentType} USDC payment not found. Make sure you sent the exact amount from the correct account.`
-    );
+    throw new Error(`Valid ${paymentType} USDC payment not found.`);
   }
 
   await db.collection("processedTransactions").doc(validTxId).set({
@@ -149,16 +131,14 @@ export async function verifyUsdcPayment(
     amount: expectedAmount,
     type: "USDC",
     purpose: paymentType,
-    propertyId: propertyId,
+    propertyId,
     verified: true,
   });
+
   return validTxId;
 }
 
-module.exports = {
-  createPropertyToken,
-  transferTokens,
-  getTreasuryTokenBalance,
-  verifyUsdcPayment,
-  client,
-};
+export { client };
+
+// Example direct call (optional test)
+createPropertyToken("Lodalasun", "L", 100);
